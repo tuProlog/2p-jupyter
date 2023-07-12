@@ -1,0 +1,48 @@
+name: CI/CD
+on:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+    paths-ignore:
+      - '.gitignore'
+      - '.mergify.yml'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'README.md'
+      - 'renovate.json'
+  pull_request:
+  workflow_dispatch:
+env:
+  PROJECT_NAME: 2p-jupyter
+jobs:
+  dockerify:
+    runs-on: ubuntu-latest
+    name: Build image and release
+    steps:      
+      - name: Checkout the repo
+        uses: actions/checkout@v3.5.3
+        with:
+          fetch-depth: 0
+
+      - name: Compute next release version
+        id: compute-next-version
+        uses: nicolasfara/precompute-semantic-release-version-action@1.0.2
+        with:
+          github-token: ${{ github.token }}
+      
+      - name: Create Docker Image
+        run: |
+          docker build -t pikalab/${{ env.PROJECT_NAME }}:latest .
+        shell: bash
+
+      - name: Docker Login
+        if: ${{ steps.compute-next-version.outputs.will-release }}
+        run: docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_PASSWORD }}
+      
+      - name: Release Image on Docker Hub
+        if: ${{ steps.compute-next-version.outputs.will-release }}
+        run: |
+          npm install
+          npx semantic-release
+        env:
+          ENFORCE_VERSION: ${{ steps.compute-next-version.outputs.next-version }}
